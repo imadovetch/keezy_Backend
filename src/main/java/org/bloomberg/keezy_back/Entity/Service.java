@@ -11,6 +11,10 @@ import java.util.List;
 /**
  * Entity representing a hotel service/amenity
  * Examples: Breakfast, Dinner, Spa services, Activities, etc.
+ * 
+ * A service can belong to:
+ * - A specific hotel (when hotel_id is set)
+ * - All hotels of an owner (when hotel_id is null)
  */
 @Entity
 @Table(name = "services")
@@ -34,9 +38,22 @@ public class Service {
 
     private String description;
 
+    /**
+     * Optional reference to a specific hotel
+     * If null, this service belongs to all hotels of the owner
+     * If set, this service belongs to only that hotel
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "hotel_id", nullable = false)
+    @JoinColumn(name = "hotel_id", nullable = true)
     private Hotel hotel;
+
+    /**
+     * Reference to the owner of this service
+     * Required for determining which owner created this service
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", nullable = false)
+    private AppUser owner;
 
     private Double price;
 

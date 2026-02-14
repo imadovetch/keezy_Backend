@@ -65,6 +65,52 @@ public class AuthenticationService {
         return userMapper.toDTO(savedUser);
     }
 
+    public UserDTO registerOwner(RegisterDTO registerDTO) {
+        if (userRepository.existsByEmail(registerDTO.getEmail())) {
+            throw new RuntimeException("Email already exists");
+        }
+
+        Role ownerRole = roleRepository.findByRoleType(Role.RoleType.OWNER)
+            .orElseThrow(() -> new RuntimeException("Owner role not found"));
+
+        AppUser user = AppUser.builder()
+            .email(registerDTO.getEmail())
+            .password(passwordEncoder.encode(registerDTO.getPassword()))
+            .firstName(registerDTO.getFirstName())
+            .lastName(registerDTO.getLastName())
+            .phone(registerDTO.getPhone())
+            .role(ownerRole)
+            .enabled(true)
+            .createdAt(System.currentTimeMillis())
+            .build();
+
+        AppUser savedUser = userRepository.save(user);
+        return userMapper.toDTO(savedUser);
+    }
+
+    public UserDTO registerGuest(RegisterDTO registerDTO) {
+        if (userRepository.existsByEmail(registerDTO.getEmail())) {
+            throw new RuntimeException("Email already exists");
+        }
+
+        Role guestRole = roleRepository.findByRoleType(Role.RoleType.GUEST)
+            .orElseThrow(() -> new RuntimeException("Guest role not found"));
+
+        AppUser user = AppUser.builder()
+            .email(registerDTO.getEmail())
+            .password(passwordEncoder.encode(registerDTO.getPassword()))
+            .firstName(registerDTO.getFirstName())
+            .lastName(registerDTO.getLastName())
+            .phone(registerDTO.getPhone())
+            .role(guestRole)
+            .enabled(true)
+            .createdAt(System.currentTimeMillis())
+            .build();
+
+        AppUser savedUser = userRepository.save(user);
+        return userMapper.toDTO(savedUser);
+    }
+
     public AuthResponseDTO login(LoginDTO loginDTO) {
         Authentication authentication = authenticationManager.authenticate(
             new UsernamePasswordAuthenticationToken(
@@ -90,10 +136,12 @@ public class AuthenticationService {
         AppUser currentUser = userRepository.findById(userId)
             .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Only ADMIN and USER roles can create staff
-        if (!currentUser.getRole().getRoleType().equals(Role.RoleType.ADMIN)
-            && !currentUser.getRole().getRoleType().equals(Role.RoleType.USER)) {
-            throw new RuntimeException("Only admin and users can create staff accounts");
+        // Only ADMIN, OWNER and USER roles can create staff
+        Role.RoleType roleType = currentUser.getRole().getRoleType();
+        if (!roleType.equals(Role.RoleType.ADMIN) 
+            && !roleType.equals(Role.RoleType.OWNER)
+            && !roleType.equals(Role.RoleType.USER)) {
+            throw new RuntimeException("Only admins, owners and users can create staff accounts");
         }
 
         if (userRepository.existsByEmail(createStaffDTO.getEmail())) {

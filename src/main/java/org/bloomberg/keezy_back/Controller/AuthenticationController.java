@@ -30,6 +30,40 @@ public class AuthenticationController {
         this.authenticationService = authenticationService;
     }
 
+    @PostMapping("/register/owner")
+    @Operation(summary = "Register a new owner", description = "Create a new owner account with email and password. Owner role is automatically assigned")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Owner successfully registered"),
+        @ApiResponse(responseCode = "400", description = "Invalid input")
+    })
+    public ResponseEntity<UnifiedResponse<UserDTO>> registerOwner(@Valid @RequestBody RegisterDTO registerDTO) {
+        UserDTO user = authenticationService.registerOwner(registerDTO);
+        UnifiedResponse<UserDTO> resp = new UnifiedResponse<>(
+            java.util.Collections.emptyList(),
+            java.util.Collections.emptyList(),
+            user,
+            true
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(resp);
+    }
+
+    @PostMapping("/register/guest")
+    @Operation(summary = "Register a new guest", description = "Create a new guest account with email and password. Guest role is automatically assigned")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Guest successfully registered"),
+        @ApiResponse(responseCode = "400", description = "Invalid input")
+    })
+    public ResponseEntity<UnifiedResponse<UserDTO>> registerGuest(@Valid @RequestBody RegisterDTO registerDTO) {
+        UserDTO user = authenticationService.registerGuest(registerDTO);
+        UnifiedResponse<UserDTO> resp = new UnifiedResponse<>(
+            java.util.Collections.emptyList(),
+            java.util.Collections.emptyList(),
+            user,
+            true
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(resp);
+    }
+
     @PostMapping("/register")
     @Operation(summary = "Register a new user", description = "Create a new user account with email and password")
     @ApiResponses(value = {

@@ -3,6 +3,7 @@ package org.bloomberg.keezy_back.Service;
 import org.bloomberg.keezy_back.DTO.ServiceDTO;
 import org.bloomberg.keezy_back.Entity.Hotel;
 import org.bloomberg.keezy_back.Entity.AppUser;
+import org.bloomberg.keezy_back.Entity.Role;
 import org.bloomberg.keezy_back.Mapper.ServiceMapper;
 import org.bloomberg.keezy_back.Repositery.ServiceRepository;
 import org.bloomberg.keezy_back.Repositery.HotelRepository;
@@ -72,7 +73,41 @@ public class ServiceService {
     }
 
     /**
-     * Create a new service for a hotel
+     * Verify that the user is an OWNER or ADMIN role (required to create/modify services)
+     * Guests cannot create services
+     * 
+     * @param userId the user ID
+     * @throws RuntimeException if user doesn't have permission
+     */
+    private void verifyServiceCreationPermission(String userId) {
+        AppUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        Role.RoleType roleType = user.getRole().getRoleType();
+        if (!roleType.equals(Role.RoleType.OWNER) && !roleType.equals(Role.RoleType.ADMIN) 
+            && !roleType.equals(Role.RoleType.USER)) {
+            throw new RuntimeException("Unauthorized: Only owners can create services");
+        }
+    }
+
+    /**
+     * Get all services for the authenticated owner
+     * Returns services with details about which hotel they belong to (or null if free)
+     * 
+     * @param jwtToken the JWT token containing owner information
+     * @return list of all services owned by this user
+     */
+    public List<ServiceDTO> getOwnerServices(String jwtToken) {
+        String ownerId = extractHotelOwnerFromToken(jwtToken);
+        
+        return serviceRepository.findByOwnerId(ownerId)
+                .stream()
+                .map(serviceMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Create a new service for a hotel or for all hotels of the owner
      * 
      * @param serviceDTO the service data
      * @param jwtToken the JWT token containing owner information
@@ -80,21 +115,14 @@ public class ServiceService {
      */
     public ServiceDTO createService(ServiceDTO serviceDTO, String jwtToken) {
         // Extract owner from JWT token
-        String hotelOwnerId = extractHotelOwnerFromToken(jwtToken);
+        String ownerId = extractHotelOwnerFromToken(jwtToken);
         
-        // Verify hotel exists and belongs to the owner
-        String hotelId = serviceDTO.getHotelId();
-        if (hotelId == null || hotelId.isBlank()) {
-            throw new RuntimeException("Hotel ID is required");
-        }
+        // Verify user has permission to create services
+        verifyServiceCreationPermission(ownerId);
         
-        Hotel hotel = hotelRepository.findById(hotelId)
-                .orElseThrow(() -> new RuntimeException("Hotel not found with ID: " + hotelId));
-        
-        // Verify the hotel belongs to the owner
-        if (!hotel.getOwner().getId().equals(hotelOwnerId)) {
-            throw new RuntimeException("Unauthorized: you are not the owner of this hotel");
-        }
+        // Get the owner user
+        AppUser owner = userRepository.findById(ownerId)
+                .orElseThrow(() -> new RuntimeException("Owner not found"));
         
         // Validate required fields
         if (serviceDTO.getTitle() == null || serviceDTO.getTitle().isBlank()) {
@@ -110,6 +138,20 @@ public class ServiceService {
             throw new RuntimeException("Valid price is required");
         }
         
+        // Hotel is optional - if provided, verify ownership
+        Hotel hotel = null;
+        String hotelId = serviceDTO.getHotelId();
+        
+        if (hotelId != null && !hotelId.isBlank()) {
+            hotel = hotelRepository.findById(hotelId)
+                    .orElseThrow(() -> new RuntimeException("Hotel not found with ID: " + hotelId));
+            
+            // Verify the hotel belongs to the owner
+            if (!hotel.getOwner().getId().equals(ownerId)) {
+                throw new RuntimeException("Unauthorized: you are not the owner of this hotel");
+            }
+        }
+        
         // Create service entity
         org.bloomberg.keezy_back.Entity.Service service = org.bloomberg.keezy_back.Entity.Service.builder()
                 .title(serviceDTO.getTitle())
@@ -117,12 +159,13 @@ public class ServiceService {
                 .subcategory(serviceDTO.getSubcategory())
                 .type(serviceDTO.getType())
                 .description(serviceDTO.getDescription())
-                .hotel(hotel)
+                .hotel(hotel)  // Can be null if service is for all hotels
+                .owner(owner)  // Owner reference
                 .price(serviceDTO.getPrice())
                 .images(convertListToString(serviceDTO.getImages()))
                 .selectedDates(convertListToString(serviceDTO.getSelectedDates()))
                 .timeSlots(convertListToString(serviceDTO.getTimeSlots()))
-                .createdBy(hotelOwnerId)
+                .createdBy(ownerId)
                 .createdAt(System.currentTimeMillis())
                 .build();
         
@@ -131,24 +174,60 @@ public class ServiceService {
     }
 
     /**
-     * Get all services for a hotel
+     * Get services for a hotel based on user role
+     * - OWNER: sees their own services for this hotel + services marked for all their hotels
+     * - GUEST: sees all services for this specific hotel
      * 
      * @param hotelId the hotel ID
-     * @param jwtToken the JWT token (for ownership verification)
+     * @param jwtToken the JWT token (for ownership verification and role checking)
      * @return list of service DTOs
      */
     public List<ServiceDTO> getHotelServices(String hotelId, String jwtToken) {
-        // Verify hotel exists and belongs to owner
-        String ownerId = extractHotelOwnerFromToken(jwtToken);
+        String userId = extractHotelOwnerFromToken(jwtToken);
         
-        Hotel hotel = hotelRepository.findById(hotelId)
-                .orElseThrow(() -> new RuntimeException("Hotel not found"));
+        AppUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
         
-        if (!hotel.getOwner().getId().equals(ownerId)) {
-            throw new RuntimeException("Unauthorized: you are not the owner of this hotel");
+        Role.RoleType roleType = user.getRole().getRoleType();
+        
+        // For OWNER/ADMIN: show only their services for this hotel (specific + free)
+        if (roleType.equals(Role.RoleType.OWNER) || roleType.equals(Role.RoleType.ADMIN) 
+            || roleType.equals(Role.RoleType.USER)) {
+            // Verify hotel belongs to the user
+            Hotel hotel = hotelRepository.findById(hotelId)
+                    .orElseThrow(() -> new RuntimeException("Hotel not found"));
+            
+            if (!hotel.getOwner().getId().equals(userId)) {
+                throw new RuntimeException("Unauthorized: you are not the owner of this hotel");
+            }
+            
+            return serviceRepository.findOwnerServicesByHotel(userId, hotelId)
+                    .stream()
+                    .map(serviceMapper::toDTO)
+                    .collect(Collectors.toList());
         }
         
-        return serviceRepository.findByHotelUuid(hotelId)
+        // For GUEST: show all services for this hotel (anyone can view)
+        return serviceRepository.findAllServicesByHotel(hotelId)
+                .stream()
+                .map(serviceMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get services for a hotel filtered by type
+     * Guests can access this without authentication
+     * 
+     * @param hotelId the hotel ID
+     * @param type the service type to filter by
+     * @return list of services matching the hotel and type
+     */
+    public List<ServiceDTO> getServicesByHotelAndType(String hotelId, String type) {
+        if (type == null || type.isBlank()) {
+            throw new RuntimeException("Service type is required");
+        }
+        
+        return serviceRepository.findServicesByHotelAndType(hotelId, type)
                 .stream()
                 .map(serviceMapper::toDTO)
                 .collect(Collectors.toList());
@@ -162,15 +241,24 @@ public class ServiceService {
      * @return the service DTO
      */
     public ServiceDTO getService(String serviceId, String jwtToken) {
-        String ownerId = extractHotelOwnerFromToken(jwtToken);
+        String userId = extractHotelOwnerFromToken(jwtToken);
+        
+        AppUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
         
         org.bloomberg.keezy_back.Entity.Service service = serviceRepository.findById(serviceId)
                 .orElseThrow(() -> new RuntimeException("Service not found"));
         
-        // Verify ownership
-        if (!service.getHotel().getOwner().getId().equals(ownerId)) {
-            throw new RuntimeException("Unauthorized: this service does not belong to your hotel");
+        Role.RoleType roleType = user.getRole().getRoleType();
+        
+        // OWNER/ADMIN/USER: can only access their own services
+        if (roleType.equals(Role.RoleType.OWNER) || roleType.equals(Role.RoleType.ADMIN) 
+            || roleType.equals(Role.RoleType.USER)) {
+            if (!service.getOwner().getId().equals(userId)) {
+                throw new RuntimeException("Unauthorized: this service does not belong to you");
+            }
         }
+        // GUEST: can access any service
         
         return serviceMapper.toDTO(service);
     }
@@ -189,9 +277,9 @@ public class ServiceService {
         org.bloomberg.keezy_back.Entity.Service service = serviceRepository.findById(serviceId)
                 .orElseThrow(() -> new RuntimeException("Service not found"));
         
-        // Verify ownership
-        if (!service.getHotel().getOwner().getId().equals(ownerId)) {
-            throw new RuntimeException("Unauthorized: this service does not belong to your hotel");
+        // Verify ownership - only owner can update their service
+        if (!service.getOwner().getId().equals(ownerId)) {
+            throw new RuntimeException("Unauthorized: this service does not belong to you");
         }
         
         // Update fields
@@ -224,9 +312,9 @@ public class ServiceService {
         org.bloomberg.keezy_back.Entity.Service service = serviceRepository.findById(serviceId)
                 .orElseThrow(() -> new RuntimeException("Service not found"));
         
-        // Verify ownership
-        if (!service.getHotel().getOwner().getId().equals(ownerId)) {
-            throw new RuntimeException("Unauthorized: this service does not belong to your hotel");
+        // Verify ownership - only owner can delete their service
+        if (!service.getOwner().getId().equals(ownerId)) {
+            throw new RuntimeException("Unauthorized: this service does not belong to you");
         }
         
         serviceRepository.delete(service);

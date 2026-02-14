@@ -26,6 +26,8 @@ public class Role {
 
     public enum RoleType {
         ADMIN("Administrator - Can manage all users and hotels"),
+        OWNER("Hotel Owner - Can create hotels and services"),
+        GUEST("Guest User - Read-only access to services"),
         USER("Normal User - Can create hotels and staff accounts"),
         STAFF("Staff Member - Created by users");
 

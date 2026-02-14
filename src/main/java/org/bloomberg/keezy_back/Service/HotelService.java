@@ -78,6 +78,15 @@ public class HotelService {
         AppUser owner = userRepository.findById(userId)
             .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // Verify user has permission to create hotels (only OWNER/ADMIN/USER can create)
+        // GUEST and STAFF cannot create hotels
+        Role.RoleType roleType = owner.getRole().getRoleType();
+        if (!roleType.equals(Role.RoleType.OWNER) 
+            && !roleType.equals(Role.RoleType.ADMIN)
+            && !roleType.equals(Role.RoleType.USER)) {
+            throw new RuntimeException("Unauthorized: Only owners, admins and users can create hotels");
+        }
+
         // If operaPropertyId is provided we allow creation with only that field
         boolean hasOperaOnly = hotelDTO.getOperaPropertyId() != null && !hotelDTO.getOperaPropertyId().isBlank()
             && (hotelDTO.getName() == null || hotelDTO.getName().isBlank());
@@ -151,6 +160,15 @@ public class HotelService {
     public HotelDTO createHotelFromOperaId(String operaPropertyId, String userId) {
         AppUser owner = userRepository.findById(userId)
             .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify user has permission to create hotels (only OWNER/ADMIN/USER can create)
+        // GUEST and STAFF cannot create hotels
+        Role.RoleType roleType = owner.getRole().getRoleType();
+        if (!roleType.equals(Role.RoleType.OWNER) 
+            && !roleType.equals(Role.RoleType.ADMIN)
+            && !roleType.equals(Role.RoleType.USER)) {
+            throw new RuntimeException("Unauthorized: Only owners, admins and users can create hotels");
+        }
 
         // Check if hotel with this Opera ID already exists
         if (hotelRepository.findByOperaPropertyId(operaPropertyId).isPresent()) {

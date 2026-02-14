@@ -41,6 +41,46 @@ public class ServiceController {
         return null;
     }
 
+    @GetMapping
+    @Operation(summary = "Get all services for authenticated owner",
+            description = "Retrieve all services created by the authenticated owner with details about hotel associations")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Services retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<UnifiedResponse<List<ServiceDTO>>> getOwnerServices(
+            @RequestHeader(value = "Authorization", required = false) String bearerToken) {
+
+        String jwt = getJwtFromRequest(bearerToken);
+        if (jwt == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new UnifiedResponse<>(
+                            Arrays.asList("Missing or invalid Authorization header"),
+                            Collections.emptyList(),
+                            null,
+                            false
+                    ));
+        }
+
+        try {
+            List<ServiceDTO> services = serviceService.getOwnerServices(jwt);
+            return ResponseEntity.ok(new UnifiedResponse<>(
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    services,
+                    true
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new UnifiedResponse<>(
+                            Arrays.asList(e.getMessage()),
+                            Collections.emptyList(),
+                            null,
+                            false
+                    ));
+        }
+    }
+
     @PostMapping("/{hotelId}")
     @Operation(summary = "Create a new service for a hotel",
             description = "Create a new service (amenity) for the hotel owned by the authenticated user")
@@ -113,6 +153,47 @@ public class ServiceController {
 
         try {
             List<ServiceDTO> services = serviceService.getHotelServices(hotelId, jwt);
+            return ResponseEntity.ok(new UnifiedResponse<>(
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    services,
+                    true
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new UnifiedResponse<>(
+                            Arrays.asList(e.getMessage()),
+                            Collections.emptyList(),
+                            null,
+                            false
+                    ));
+        }
+    }
+
+    @GetMapping("/{hotelId}/by-type")
+    @Operation(summary = "Get services by hotel and type",
+            description = "Retrieve all services for a specific hotel filtered by service type (guest access)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Services retrieved successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid input"),
+            @ApiResponse(responseCode = "404", description = "Hotel not found")
+    })
+    public ResponseEntity<UnifiedResponse<List<ServiceDTO>>> getServicesByType(
+            @PathVariable String hotelId,
+            @RequestParam String type) {
+
+        if (type == null || type.isBlank()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new UnifiedResponse<>(
+                            Arrays.asList("Service type is required"),
+                            Collections.emptyList(),
+                            null,
+                            false
+                    ));
+        }
+
+        try {
+            List<ServiceDTO> services = serviceService.getServicesByHotelAndType(hotelId, type);
             return ResponseEntity.ok(new UnifiedResponse<>(
                     Collections.emptyList(),
                     Collections.emptyList(),

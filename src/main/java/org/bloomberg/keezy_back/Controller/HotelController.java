@@ -118,13 +118,23 @@ public class HotelController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all hotels", description = "Retrieve a list of all hotels")
+    @Operation(summary = "Get my hotels", description = "Retrieve hotels owned by the current user")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "List of hotels retrieved"),
+        @ApiResponse(responseCode = "200", description = "User's hotels retrieved"),
         @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
     public ResponseEntity<UnifiedResponse<java.util.List<HotelDTO>>> getAllHotels() {
-        java.util.List<HotelDTO> list = hotelService.getAllHotels();
+        String userId = getCurrentUserId();
+        if (userId == null) {
+            UnifiedResponse<java.util.List<HotelDTO>> err = new UnifiedResponse<>(
+                java.util.Arrays.asList("Unauthorized"),
+                java.util.Collections.emptyList(),
+                null,
+                false
+            );
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(err);
+        }
+        java.util.List<HotelDTO> list = hotelService.getHotelsByOwner(userId);
         UnifiedResponse<java.util.List<HotelDTO>> resp = new UnifiedResponse<>(
             java.util.Collections.emptyList(),
             java.util.Collections.emptyList(),
