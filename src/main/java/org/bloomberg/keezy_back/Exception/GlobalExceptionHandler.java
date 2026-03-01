@@ -65,5 +65,30 @@ public class GlobalExceptionHandler {
 
         return new ResponseEntity<>(resp, HttpStatus.BAD_REQUEST);
     }
+
+    @ExceptionHandler(NullPointerException.class)
+    public ResponseEntity<UnifiedResponse<Object>> handleNullPointerException(NullPointerException ex, WebRequest request) {
+        ex.printStackTrace();
+        UnifiedResponse<Object> resp = new UnifiedResponse<>(
+            java.util.Arrays.asList("Internal server error: " + ex.getMessage()),
+            java.util.Collections.emptyList(),
+            null,
+            false
+        );
+        return new ResponseEntity<>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<UnifiedResponse<Object>> handleGenericException(Exception ex, WebRequest request) {
+        ex.printStackTrace();
+        UnifiedResponse<Object> resp = new UnifiedResponse<>(
+            java.util.Arrays.asList("Internal server error: " + ex.getMessage()),
+            java.util.Collections.emptyList(),
+            null,
+            false
+        );
+        return new ResponseEntity<>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
 }
+
 

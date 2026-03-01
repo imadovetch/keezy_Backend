@@ -33,6 +33,11 @@ public class ServiceDTO {
     
     private Double price;
     
+    /**
+     * Whether this service is a reclamation (true) or regular service (false)
+     */
+    private Boolean reclamation;
+    
     // Array of images (base64 encoded or file paths)
     private List<String> images;
     

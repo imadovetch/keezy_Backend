@@ -162,6 +162,7 @@ public class ServiceService {
                 .hotel(hotel)  // Can be null if service is for all hotels
                 .owner(owner)  // Owner reference
                 .price(serviceDTO.getPrice())
+                .reclamation(serviceDTO.getReclamation() != null ? serviceDTO.getReclamation() : false)
                 .images(convertListToString(serviceDTO.getImages()))
                 .selectedDates(convertListToString(serviceDTO.getSelectedDates()))
                 .timeSlots(convertListToString(serviceDTO.getTimeSlots()))
@@ -190,7 +191,7 @@ public class ServiceService {
         
         Role.RoleType roleType = user.getRole().getRoleType();
         
-        // For OWNER/ADMIN: show only their services for this hotel (specific + free)
+        // For OWNER/ADMIN: show only their services for this hotel (specific + free), excluding reclamations
         if (roleType.equals(Role.RoleType.OWNER) || roleType.equals(Role.RoleType.ADMIN) 
             || roleType.equals(Role.RoleType.USER)) {
             // Verify hotel belongs to the user
@@ -203,13 +204,57 @@ public class ServiceService {
             
             return serviceRepository.findOwnerServicesByHotel(userId, hotelId)
                     .stream()
+                    .filter(s -> s.getReclamation() == null || !s.getReclamation())
                     .map(serviceMapper::toDTO)
                     .collect(Collectors.toList());
         }
         
-        // For GUEST: show all services for this hotel (anyone can view)
+        // For GUEST: show all services for this hotel, excluding reclamations
         return serviceRepository.findAllServicesByHotel(hotelId)
                 .stream()
+                .filter(s -> s.getReclamation() == null || !s.getReclamation())
+                .map(serviceMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get reclamation services for a hotel
+     * Reclamations are special service requests (reclamation = true)
+     * 
+     * @param hotelId the hotel ID
+     * @param jwtToken the JWT token (for ownership verification)
+     * @return list of reclamation services for the hotel
+     */
+    public List<ServiceDTO> getHotelReclamations(String hotelId, String jwtToken) {
+        String userId = extractHotelOwnerFromToken(jwtToken);
+        
+        AppUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        Role.RoleType roleType = user.getRole().getRoleType();
+        
+        // For OWNER/ADMIN: show only their reclamations for this hotel
+        if (roleType.equals(Role.RoleType.OWNER) || roleType.equals(Role.RoleType.ADMIN) 
+            || roleType.equals(Role.RoleType.USER)) {
+            // Verify hotel belongs to the user
+            Hotel hotel = hotelRepository.findById(hotelId)
+                    .orElseThrow(() -> new RuntimeException("Hotel not found"));
+            
+            if (!hotel.getOwner().getId().equals(userId)) {
+                throw new RuntimeException("Unauthorized: you are not the owner of this hotel");
+            }
+            
+            return serviceRepository.findOwnerServicesByHotel(userId, hotelId)
+                    .stream()
+                    .filter(s -> s.getReclamation() != null && s.getReclamation())
+                    .map(serviceMapper::toDTO)
+                    .collect(Collectors.toList());
+        }
+        
+        // For GUEST: show all reclamations for this hotel
+        return serviceRepository.findAllServicesByHotel(hotelId)
+                .stream()
+                .filter(s -> s.getReclamation() != null && s.getReclamation())
                 .map(serviceMapper::toDTO)
                 .collect(Collectors.toList());
     }

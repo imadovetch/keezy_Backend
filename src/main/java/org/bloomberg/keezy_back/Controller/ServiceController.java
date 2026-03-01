@@ -170,6 +170,48 @@ public class ServiceController {
         }
     }
 
+    @GetMapping("/{hotelId}/reclamations")
+    @Operation(summary = "Get all reclamations for a hotel",
+            description = "Retrieve all reclamation services for a hotel owned by the authenticated user")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Reclamations retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "404", description = "Hotel not found")
+    })
+    public ResponseEntity<UnifiedResponse<List<ServiceDTO>>> getHotelReclamations(
+            @PathVariable String hotelId,
+            @RequestHeader(value = "Authorization", required = false) String bearerToken) {
+
+        String jwt = getJwtFromRequest(bearerToken);
+        if (jwt == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new UnifiedResponse<>(
+                            Arrays.asList("Missing or invalid Authorization header"),
+                            Collections.emptyList(),
+                            null,
+                            false
+                    ));
+        }
+
+        try {
+            List<ServiceDTO> reclamations = serviceService.getHotelReclamations(hotelId, jwt);
+            return ResponseEntity.ok(new UnifiedResponse<>(
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    reclamations,
+                    true
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new UnifiedResponse<>(
+                            Arrays.asList(e.getMessage()),
+                            Collections.emptyList(),
+                            null,
+                            false
+                    ));
+        }
+    }
+
     @GetMapping("/{hotelId}/by-type")
     @Operation(summary = "Get services by hotel and type",
             description = "Retrieve all services for a specific hotel filtered by service type (guest access)")

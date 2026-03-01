@@ -57,6 +57,13 @@ public class Service {
 
     private Double price;
 
+    /**
+     * Whether this service is a reclamation (true) or regular service (false)
+     * Defaults to false
+     */
+    @Column(nullable = false)
+    private Boolean reclamation = false;
+
     // Comma-separated list of image filenames
     @Column(columnDefinition = "TEXT")
     private String images;
